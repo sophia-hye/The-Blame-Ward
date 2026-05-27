@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  min-height: 100vh;
+}
+
+/* 캐릭터 스탠드 효과 — drop-shadow는 큰 알파 PNG에서 GPU 부하가 크므로 가볍게 */
+.char-stand {
+  filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.5));
+}
+
+/* 캐릭터 감정 이미지 교체 시 부드러운 페이드 */
+@keyframes emotionIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-emotionIn {
+  animation: emotionIn 0.25s ease-out;
+}
