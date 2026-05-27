@@ -1,0 +1,19 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.log
+
+# build cache
+tsconfig.tsbuildinfo
+
+# bkit / pdca tooling local state
+docs/.bkit-*.json
+docs/.pdca-*.json
+
+# Claude Code local-only settings
+.claude/settings.local.json
