@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { AlertTriangle, Heart, MessageCircle } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -6,8 +6,15 @@ import { characters, imgLeeRuRi } from './game/characters';
 import { scenes, scoreChanges, choices } from './game/scenes';
 import type { Choice } from './game/types';
 import CharacterStage from './game/CharacterStage';
+import Atmosphere from './game/Atmosphere';
+import ImpactLayer, { type FloatScore } from './game/ImpactLayer';
+import GameMenu, { type BacklogEntry } from './game/GameMenu';
+import { useGameSettings } from './game/settings';
+import { sfx } from './game/sound';
 
 export default function BlameWardGame() {
+  const { settings, update: updateSettings } = useGameSettings();
+
   const [sceneIdx, setSceneIdx] = useState(0);
   const [dialogueIdx, setDialogueIdx] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
@@ -23,29 +30,83 @@ export default function BlameWardGame() {
   const [choiceReady, setChoiceReady] = useState(false);
   const [feedbackReady, setFeedbackReady] = useState(false);
 
+  // 임팩트 효과 상태
+  const [shake, setShake] = useState<'none' | 'small' | 'big'>('none');
+  const [flashColor, setFlashColor] = useState<'white' | 'red' | null>(null);
+  const [zoomImpact, setZoomImpact] = useState(false);
+  const [floatingScores, setFloatingScores] = useState<FloatScore[]>([]);
+  const [gaugePulse, setGaugePulse] = useState(false);
+  const floatIdRef = useRef(0);
+
+  // 대사 백로그
+  const [backlog, setBacklog] = useState<BacklogEntry[]>([]);
+  const lastLoggedRef = useRef<string>('');
+
   const currentScene = scenes[sceneIdx];
   const currentDialogue = currentScene?.dialogues[dialogueIdx];
   const speaker = currentDialogue?.speaker ?? '나레이션';
   const speakerInfo = characters[speaker] || characters['나레이션'];
 
+  // ───────────────────────── 임팩트 트리거 헬퍼 ─────────────────────────
+  const triggerShake = useCallback((mode: 'small' | 'big') => {
+    setShake(mode);
+    setTimeout(() => setShake('none'), mode === 'big' ? 520 : 320);
+  }, []);
+  const triggerFlash = useCallback((color: 'white' | 'red') => {
+    setFlashColor(color);
+    setTimeout(() => setFlashColor(null), 720);
+  }, []);
+  const triggerZoom = useCallback(() => {
+    setZoomImpact(true);
+    setTimeout(() => setZoomImpact(false), 700);
+  }, []);
+  const triggerGaugePulse = useCallback(() => {
+    setGaugePulse(true);
+    setTimeout(() => setGaugePulse(false), 700);
+  }, []);
+  const spawnFloatingScore = useCallback((delta: number) => {
+    const id = ++floatIdRef.current;
+    setFloatingScores(prev => [...prev, { id, delta }]);
+    setTimeout(() => setFloatingScores(prev => prev.filter(s => s.id !== id)), 1700);
+  }, []);
+
+  // ───────────────────────── typewriter ─────────────────────────
   useEffect(() => {
     if (!currentDialogue || showChoice || showFeedback) return;
     setIsTyping(true);
     setDisplayedText('');
     const text = currentDialogue.text;
+    const speedMs = settings.skip ? 2 : settings.textSpeedMs;
     let i = 0;
     const interval = setInterval(() => {
       if (i < text.length) {
         setDisplayedText(text.slice(0, i + 1));
+        // 타이핑 SFX (영문/숫자/한글 character마다 가볍게)
+        if (i % 2 === 0 && !settings.skip) sfx.play('type');
         i++;
       } else {
         setIsTyping(false);
         clearInterval(interval);
       }
-    }, 25);
+    }, speedMs);
     return () => clearInterval(interval);
-  }, [sceneIdx, dialogueIdx, showChoice, showFeedback]);
+  }, [sceneIdx, dialogueIdx, showChoice, showFeedback, settings.textSpeedMs, settings.skip]);
 
+  // ───────────────────────── 백로그 누적 ─────────────────────────
+  useEffect(() => {
+    if (!currentDialogue) return;
+    if (showChoice || showFeedback) return;
+    const key = `${sceneIdx}:${dialogueIdx}`;
+    if (lastLoggedRef.current === key) return;
+    lastLoggedRef.current = key;
+    const info = characters[currentDialogue.speaker];
+    setBacklog(prev => [
+      ...prev,
+      { speaker: currentDialogue.speaker, text: currentDialogue.text, speakerColor: info?.color },
+    ]);
+  }, [sceneIdx, dialogueIdx, currentDialogue, showChoice, showFeedback]);
+
+  // ───────────────────────── 자동 점수 변화 ─────────────────────────
   useEffect(() => {
     const key = `${currentScene?.id}-${dialogueIdx}`;
     const change = scoreChanges[key];
@@ -54,44 +115,67 @@ export default function BlameWardGame() {
         setSafetyScore(prev => Math.max(0, prev + change.delta));
         setWarningText(change.warning);
         setShowWarning(true);
+        spawnFloatingScore(change.delta);
+        triggerGaugePulse();
+        // 큰 음수 변화엔 셰이크 + 붉은 플래시 + 경고음 + 줌
+        if (change.delta <= -3) {
+          triggerShake('big');
+          triggerFlash('red');
+          triggerZoom();
+          sfx.play('score-warning');
+          sfx.play('score-down');
+        } else if (change.delta < 0) {
+          triggerShake('small');
+          sfx.play('score-down');
+        } else if (change.delta > 0) {
+          sfx.play('score-up');
+        }
         setTimeout(() => setShowWarning(false), 2500);
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [sceneIdx, dialogueIdx]);
+  }, [sceneIdx, dialogueIdx, currentScene?.id, showChoice, showFeedback, spawnFloatingScore, triggerShake, triggerFlash, triggerZoom, triggerGaugePulse]);
 
-  // isChoice 대사 typewriter가 끝나면 약간의 여유 시간 후 자동으로 선택지 모달을 띄움
-  // (사용자의 추가 클릭이 모달 옵션을 우연히 누르는 사고를 방지)
+  // ───────────────────────── isChoice 자동 모달 ─────────────────────────
   useEffect(() => {
     if (!currentDialogue?.isChoice) return;
     if (isTyping || showChoice || showFeedback) return;
-    const t = setTimeout(() => setShowChoice(true), 800);
+    const t = setTimeout(() => {
+      setShowChoice(true);
+      sfx.play('modal-open');
+    }, 800);
     return () => clearTimeout(t);
   }, [currentDialogue, isTyping, showChoice, showFeedback]);
 
-  // 선택지 모달이 뜬 직후 일정 시간 동안 옵션 클릭을 막아 우발적 선택을 방지
+  // ───────────────────────── 모달 cooldown ─────────────────────────
   useEffect(() => {
-    if (!showChoice) {
-      setChoiceReady(false);
-      return;
-    }
+    if (!showChoice) { setChoiceReady(false); return; }
     setChoiceReady(false);
     const t = setTimeout(() => setChoiceReady(true), 350);
     return () => clearTimeout(t);
   }, [showChoice]);
 
-  // 피드백 모달도 동일하게 cooldown
   useEffect(() => {
-    if (!showFeedback) {
-      setFeedbackReady(false);
-      return;
-    }
+    if (!showFeedback) { setFeedbackReady(false); return; }
     setFeedbackReady(false);
     const t = setTimeout(() => setFeedbackReady(true), 350);
     return () => clearTimeout(t);
   }, [showFeedback]);
 
+  // ───────────────────────── 오토 플레이 ─────────────────────────
+  useEffect(() => {
+    if (!gameStarted) return;
+    if (!settings.autoPlay) return;
+    if (showChoice || showFeedback) return;
+    if (isTyping) return;
+    if (currentDialogue?.isChoice) return;
+    const wait = Math.max(800, Math.min(3500, (currentDialogue?.text?.length ?? 30) * 45));
+    const t = setTimeout(() => handleNext(), wait);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.autoPlay, gameStarted, isTyping, showChoice, showFeedback, sceneIdx, dialogueIdx, currentDialogue]);
 
+  // ───────────────────────── 진행 로직 ─────────────────────────
   const handleNext = () => {
     if (isTyping) {
       setDisplayedText(currentDialogue!.text);
@@ -100,11 +184,14 @@ export default function BlameWardGame() {
     }
     if (currentDialogue?.isChoice) {
       setShowChoice(true);
+      sfx.play('modal-open');
       return;
     }
+    sfx.play('click');
     if (dialogueIdx < currentScene.dialogues.length - 1) {
       setDialogueIdx(dialogueIdx + 1);
     } else if (sceneIdx < scenes.length - 1) {
+      sfx.play('scene-transition');
       if (sceneIdx + 1 === 2) {
         setSceneIdx(3);
       } else {
@@ -119,15 +206,26 @@ export default function BlameWardGame() {
     setShowChoice(false);
     setShowFeedback(true);
     setSafetyScore(prev => Math.max(0, Math.min(100, prev + choice.feedback.scoreDelta)));
+    spawnFloatingScore(choice.feedback.scoreDelta);
+    triggerGaugePulse();
+    if (choice.type === 'best' || choice.type === 'just_culture') {
+      sfx.play('choice-best');
+      triggerFlash('white');
+    } else {
+      sfx.play('choice-bad');
+      triggerShake('small');
+    }
   };
 
   const handleFeedbackContinue = () => {
+    sfx.play('click');
     setShowFeedback(false);
     setSceneIdx(3);
     setDialogueIdx(0);
   };
 
   const handleRestart = () => {
+    sfx.play('click');
     setSceneIdx(0);
     setDialogueIdx(0);
     setSafetyScore(15);
@@ -136,26 +234,29 @@ export default function BlameWardGame() {
     setChoiceResult(null);
     setGameStarted(false);
     setImgErrors({});
+    setBacklog([]);
+    lastLoggedRef.current = '';
   };
 
   const handleImgError = (s: string) => {
     setImgErrors(prev => ({ ...prev, [s]: true }));
   };
 
-  // 시작 화면
+  // ───────────────────────── 시작 화면 (시네마틱) ─────────────────────────
   if (!gameStarted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-red-950/40 flex items-center justify-center p-6 font-sans">
-        <div className="max-w-2xl w-full text-center space-y-8">
+      <div className="min-h-screen h-screen overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-red-950/40 flex items-center justify-center p-6 font-sans relative">
+        <Atmosphere safetyScore={15} />
+        <div className="max-w-2xl w-full text-center space-y-8 relative z-10">
           <div className="space-y-3">
-            <div className="inline-block px-4 py-1 border border-red-700/50 rounded-full text-red-300 text-xs tracking-widest">
+            <div className="subtitle-fade-1 inline-block px-4 py-1 border border-red-700/50 rounded-full text-red-300 text-xs tracking-widest">
               EDUCATIONAL SIMULATION · CHAPTER 1
             </div>
-            <h1 className="text-5xl font-bold text-white tracking-tight">Culture Transformation</h1>
-            <h2 className="text-3xl font-light text-red-300 italic">: The Blame Ward</h2>
+            <h1 className="title-reveal text-5xl md:text-6xl font-bold text-white tracking-tight">Culture Transformation</h1>
+            <h2 className="subtitle-fade-1 text-3xl font-light text-red-300 italic">: The Blame Ward</h2>
           </div>
 
-          <div className="flex justify-center">
+          <div className="subtitle-fade-2 flex justify-center">
             <div className="w-40 h-40 rounded-full overflow-hidden border-4 border-blue-500 bg-blue-600 shadow-2xl shadow-blue-900/50">
               {!imgErrors['이루리'] ? (
                 <img src={imgLeeRuRi} alt="이루리" className="w-full h-full object-cover" onError={() => handleImgError('이루리')} />
@@ -165,12 +266,12 @@ export default function BlameWardGame() {
             </div>
           </div>
 
-          <p className="text-stone-300 leading-relaxed">
+          <p className="subtitle-fade-2 text-stone-300 leading-relaxed">
             당신은 신생아 및 소아 중환자실(NICU/PICU)에 새로 발령받은 신규 간호사<br/>
             <span className="text-blue-300 font-semibold text-xl">이루리</span>입니다.
           </p>
 
-          <div className="bg-slate-900/60 border border-slate-700 rounded-lg p-6 text-left space-y-3 backdrop-blur">
+          <div className="subtitle-fade-3 bg-slate-900/60 border border-slate-700 rounded-lg p-6 text-left space-y-3 backdrop-blur">
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-red-400 mt-1 flex-shrink-0" />
               <div>
@@ -195,18 +296,19 @@ export default function BlameWardGame() {
           </div>
 
           <button
-            onClick={() => setGameStarted(true)}
-            className="px-8 py-3 bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 text-white rounded-lg shadow-lg shadow-red-900/50 transition-all hover:scale-105 font-semibold tracking-wide"
+            onClick={() => { sfx.play('choice-select'); setGameStarted(true); }}
+            className="subtitle-fade-4 px-8 py-3 bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 text-white rounded-lg shadow-lg shadow-red-900/50 transition-all hover:scale-105 font-semibold tracking-wide"
           >
             병동에 입장하기 →
           </button>
 
-          <p className="text-stone-500 text-xs">※ 본 프로그램은 환자안전문화 교육 연구 목적의 시뮬레이션입니다.</p>
+          <p className="subtitle-fade-4 text-stone-500 text-xs">※ 본 프로그램은 환자안전문화 교육 연구 목적의 시뮬레이션입니다.</p>
         </div>
       </div>
     );
   }
 
+  // ───────────────────────── 게임 화면 ─────────────────────────
   const getScoreColor = () => {
     if (safetyScore < 10) return 'text-red-500';
     if (safetyScore < 30) return 'text-red-400';
@@ -214,14 +316,12 @@ export default function BlameWardGame() {
     if (safetyScore < 70) return 'text-yellow-400';
     return 'text-emerald-400';
   };
-
   const getScoreBg = () => {
     if (safetyScore < 30) return 'from-red-600 to-red-500';
     if (safetyScore < 60) return 'from-orange-500 to-yellow-500';
     return 'from-emerald-500 to-green-400';
   };
 
-  // 현재 장면에 등장하는 캐릭터들 추출
   const sceneCharacters = [...new Set(
     currentScene.dialogues
       .map(d => d.speaker)
@@ -231,25 +331,32 @@ export default function BlameWardGame() {
   const isCenterMessage = speaker === '나레이션' || speaker === '시스템';
   const showBubbleOnCharacter = !isCenterMessage && !showChoice && !showFeedback;
 
+  const shakeClass = shake === 'big' ? 'shake-big' : shake === 'small' ? 'shake-small' : '';
+  const zoomClass = zoomImpact ? 'zoom-impact' : '';
+
   return (
     <div
-      className={`min-h-screen h-screen overflow-hidden bg-gradient-to-br ${currentScene.bg} font-sans relative`}
+      className={`min-h-screen h-screen overflow-hidden bg-gradient-to-br ${currentScene.bg} font-sans relative ${shakeClass} ${zoomClass}`}
       onClick={(e) => {
-        // 버튼 또는 인터랙티브 요소 위 클릭은 메인 진행으로 처리하지 않음
         if (e.target instanceof Element && e.target.closest('button')) return;
+        if (e.target instanceof Element && e.target.closest('input')) return;
         if (!showChoice && !showFeedback) handleNext();
       }}
     >
-      {/* 배경 분위기 효과 */}
-      <div className="absolute inset-0 opacity-[0.04] flex items-center justify-center pointer-events-none">
+      {/* 배경 그라데이션 분위기 (기존 이모지 백그라운드는 매우 옅게) */}
+      <div className="absolute inset-0 opacity-[0.025] flex items-center justify-center pointer-events-none">
         <div className="text-[20rem]">{currentScene.bgImage}</div>
       </div>
-      <div className="absolute inset-0 bg-black/40 pointer-events-none"></div>
+      <div className="absolute inset-0 bg-black/45 pointer-events-none"></div>
+
+      {/* 시네마틱 배경 레이어 */}
+      <Atmosphere safetyScore={safetyScore} />
+
       {/* 무대 바닥 비네팅 */}
       <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none z-[5]"></div>
 
       {/* 상단 UI: 환자안전문화 지수 */}
-      <div className="relative z-30 px-4 md:px-6 pt-3 pb-2 border-b border-red-900/40 backdrop-blur-sm bg-black/50">
+      <div className="relative z-30 px-4 md:px-6 pt-3 pb-2 border-b border-red-900/40 backdrop-blur-sm bg-black/55">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 flex-1">
             <AlertTriangle className={`w-5 h-5 ${getScoreColor()} ${safetyScore < 20 ? 'animate-pulse' : ''}`} />
@@ -258,7 +365,7 @@ export default function BlameWardGame() {
                 <span className="text-xs text-stone-400 tracking-widest">환자안전문화 지수 · PATIENT SAFETY CULTURE INDEX</span>
                 <span className={`text-lg font-bold ${getScoreColor()} ${safetyScore < 20 ? 'animate-pulse' : ''}`}>{safetyScore}%</span>
               </div>
-              <div className="h-2 bg-stone-900 rounded-full overflow-hidden border border-stone-700">
+              <div className={`h-2 bg-stone-900 rounded-full overflow-hidden border border-stone-700 ${gaugePulse ? 'gauge-pulse' : ''}`}>
                 <div
                   className={`h-full bg-gradient-to-r ${getScoreBg()} transition-all duration-1000 ease-out`}
                   style={{ width: `${safetyScore}%` }}
@@ -290,6 +397,9 @@ export default function BlameWardGame() {
           </motion.div>
         )}
       </div>
+
+      {/* 메뉴 (백로그/스킵/오토/볼륨/설정) */}
+      <GameMenu settings={settings} onUpdate={updateSettings} backlog={backlog} />
 
       {/* 캐릭터 무대 */}
       <CharacterStage
@@ -332,11 +442,19 @@ export default function BlameWardGame() {
       </AnimatePresence>
 
       {/* 클릭 힌트 (하단 중앙) */}
-      {!showChoice && !showFeedback && !isTyping && (
+      {!showChoice && !showFeedback && !isTyping && !settings.autoPlay && (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 text-stone-400/80 text-xs animate-pulse">
-          화면을 클릭하여 계속 ▶
+          {settings.skip ? '스킵 진행 중...' : '화면을 클릭하여 계속 ▶'}
         </div>
       )}
+      {settings.autoPlay && !showChoice && !showFeedback && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 text-amber-300/80 text-xs">
+          AUTO PLAY
+        </div>
+      )}
+
+      {/* 임팩트 레이어 (플래시 + 플로팅 점수) */}
+      <ImpactLayer flashColor={flashColor} floatingScores={floatingScores} />
 
       {/* 선택지 모달 */}
       <AnimatePresence>
@@ -345,7 +463,7 @@ export default function BlameWardGame() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/65 backdrop-blur-md"
             onClick={(e) => e.stopPropagation()}
           >
             <motion.div
@@ -353,7 +471,7 @@ export default function BlameWardGame() {
               animate={{ scale: 1, y: 0 }}
               className="max-w-3xl w-full space-y-3"
             >
-              <div className="bg-blue-950/80 border-2 border-blue-500 rounded-lg p-4 flex items-center gap-4 shadow-2xl">
+              <div className="bg-blue-950/85 border-2 border-blue-500 rounded-lg p-4 flex items-center gap-4 shadow-[0_24px_64px_rgba(0,0,0,0.7)]">
                 <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-blue-400 bg-blue-600 flex-shrink-0">
                   {!imgErrors['이루리'] ? (
                     <img src={imgLeeRuRi} alt="이루리" className="w-full h-full object-cover" onError={() => handleImgError('이루리')} />
@@ -371,6 +489,7 @@ export default function BlameWardGame() {
                   key={i}
                   whileHover={{ x: 4 }}
                   disabled={!choiceReady}
+                  onMouseEnter={() => choiceReady && sfx.play('choice-hover')}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!choiceReady) return;
@@ -398,7 +517,7 @@ export default function BlameWardGame() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto"
+            className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <motion.div

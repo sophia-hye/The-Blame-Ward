@@ -6,16 +6,223 @@ html, body, #root {
   min-height: 100vh;
 }
 
-/* 캐릭터 스탠드 효과 — drop-shadow는 큰 알파 PNG에서 GPU 부하가 크므로 가볍게 */
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* =========================================================================
+   캐릭터 표현
+   ========================================================================= */
+
 .char-stand {
   filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.5));
 }
 
-/* 캐릭터 감정 이미지 교체 시 부드러운 페이드 */
-@keyframes emotionIn {
+/* idle 상태 캐릭터 — 매우 느린 호흡 */
+@keyframes idleBreathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-4px) scale(1.005); }
+}
+.char-idle {
+  animation: idleBreathe 5.2s ease-in-out infinite;
+  transform-origin: bottom center;
+  will-change: transform;
+}
+
+/* 화자 — 살짝 더 빠른 호흡 + 토킹 진동 */
+@keyframes activeBreathe {
+  0%, 100% { transform: translateY(-2px) scale(1.01); }
+  50%      { transform: translateY(-7px) scale(1.015); }
+}
+.char-active {
+  animation: activeBreathe 3.4s ease-in-out infinite;
+  transform-origin: bottom center;
+  will-change: transform;
+}
+
+@keyframes talking {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  25%      { transform: translate3d(-0.7px, -0.4px, 0); }
+  50%      { transform: translate3d(0.7px, 0.2px, 0); }
+  75%      { transform: translate3d(-0.4px, 0.5px, 0); }
+}
+.char-talking {
+  animation: talking 220ms steps(4, end) infinite;
+}
+
+/* 캐릭터 감정 이미지 크로스페이드 */
+@keyframes emotionFadeIn {
   from { opacity: 0; }
-  to { opacity: 1; }
+  to   { opacity: 1; }
 }
-.animate-emotionIn {
-  animation: emotionIn 0.25s ease-out;
+@keyframes emotionFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
+.emotion-fade-in  { animation: emotionFadeIn  0.45s ease-out forwards; }
+.emotion-fade-out { animation: emotionFadeOut 0.45s ease-out forwards; }
+
+/* 화자 등장(슬라이드인) */
+@keyframes charEnterLeft {
+  from { opacity: 0; transform: translateX(-60px) translateY(20px); }
+  to   { opacity: 1; transform: translateX(0) translateY(0); }
+}
+@keyframes charEnterRight {
+  from { opacity: 0; transform: translateX(60px) translateY(20px); }
+  to   { opacity: 1; transform: translateX(0) translateY(0); }
+}
+.char-enter-left  { animation: charEnterLeft 0.55s cubic-bezier(.16,.84,.34,1.02) both; }
+.char-enter-right { animation: charEnterRight 0.55s cubic-bezier(.16,.84,.34,1.02) both; }
+
+/* =========================================================================
+   화면 셰이크 / 플래시 / 줌
+   ========================================================================= */
+
+@keyframes shakeSmall {
+  0%, 100% { transform: translate(0, 0); }
+  20%      { transform: translate(-3px, 2px); }
+  40%      { transform: translate(3px, -2px); }
+  60%      { transform: translate(-2px, 3px); }
+  80%      { transform: translate(2px, -1px); }
+}
+@keyframes shakeBig {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  15%      { transform: translate(-8px, 4px) rotate(-0.3deg); }
+  30%      { transform: translate(8px, -5px) rotate(0.3deg); }
+  45%      { transform: translate(-7px, 5px) rotate(-0.2deg); }
+  60%      { transform: translate(6px, -3px) rotate(0.2deg); }
+  75%      { transform: translate(-3px, 2px) rotate(0); }
+}
+.shake-small { animation: shakeSmall 320ms ease-in-out; }
+.shake-big   { animation: shakeBig 520ms ease-in-out; }
+
+@keyframes flashWhite {
+  0%   { opacity: 0; }
+  10%  { opacity: 0.55; }
+  100% { opacity: 0; }
+}
+@keyframes flashRed {
+  0%   { opacity: 0; }
+  10%  { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+.flash-white { animation: flashWhite 520ms ease-out; }
+.flash-red   { animation: flashRed 720ms ease-out; }
+
+@keyframes zoomImpact {
+  0%   { transform: scale(1); }
+  18%  { transform: scale(1.035); }
+  100% { transform: scale(1); }
+}
+.zoom-impact { animation: zoomImpact 700ms ease-out; }
+
+/* =========================================================================
+   점수 변화 플로팅 텍스트
+   ========================================================================= */
+
+@keyframes scoreFloatUp {
+  0%   { opacity: 0; transform: translate(-50%, 0) scale(0.85); }
+  15%  { opacity: 1; transform: translate(-50%, -8px) scale(1.05); }
+  100% { opacity: 0; transform: translate(-50%, -60px) scale(1); }
+}
+.score-float { animation: scoreFloatUp 1.6s ease-out forwards; }
+
+@keyframes gaugePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); }
+  35%      { box-shadow: 0 0 18px 4px rgba(255,255,255,0.4); }
+}
+.gauge-pulse { animation: gaugePulse 700ms ease-out; }
+
+/* =========================================================================
+   시네마틱 배경 — 형광등, 비상등, 파티클, 비네팅
+   ========================================================================= */
+
+/* 형광등 — 아주 미세한 호흡감만. 화면 깜빡임 X */
+@keyframes fluorescentFlicker {
+  0%, 100% { opacity: 0.96; }
+  50%      { opacity: 1; }
+}
+.fluorescent {
+  background:
+    radial-gradient(ellipse at top, rgba(220,235,255,0.08) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 30%);
+  animation: fluorescentFlicker 14s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* 비상등 — 천천히 호흡, 최대치도 부드럽게 */
+@keyframes emergencyPulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+.emergency-red {
+  background: radial-gradient(ellipse at center, rgba(239,68,68,0.4) 0%, rgba(239,68,68,0) 60%);
+  animation: emergencyPulse 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* 부유 먼지 파티클 */
+@keyframes dustDrift {
+  0%   { transform: translate3d(0, 0, 0); opacity: 0; }
+  20%  { opacity: 0.5; }
+  100% { transform: translate3d(20px, -120vh, 0); opacity: 0; }
+}
+.dust-particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(255,255,255,0.55);
+  filter: blur(0.5px);
+  animation: dustDrift linear infinite;
+  pointer-events: none;
+}
+
+/* 강한 비네팅 */
+.vignette {
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.55) 100%);
+  pointer-events: none;
+}
+
+/* =========================================================================
+   말풍선 / 모달
+   ========================================================================= */
+
+@keyframes bubblePop {
+  from { opacity: 0; transform: scale(0.9) translateY(6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.bubble-pop { animation: bubblePop 0.22s cubic-bezier(.16,.84,.34,1.05); }
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.94) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-in { animation: modalIn 0.32s cubic-bezier(.16,.84,.34,1.02); }
+
+@keyframes backdropIn {
+  from { opacity: 0; backdrop-filter: blur(0); }
+  to   { opacity: 1; backdrop-filter: blur(6px); }
+}
+.backdrop-in { animation: backdropIn 0.35s ease-out; }
+
+/* =========================================================================
+   시작 화면 시네마틱
+   ========================================================================= */
+
+@keyframes titleReveal {
+  0%   { opacity: 0; transform: translateY(20px); letter-spacing: 0.5em; }
+  60%  { opacity: 1; letter-spacing: 0.04em; }
+  100% { opacity: 1; transform: translateY(0); letter-spacing: 0; }
+}
+.title-reveal { animation: titleReveal 1.6s ease-out both; }
+
+@keyframes subtitleFade {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.subtitle-fade-1 { animation: subtitleFade 0.7s ease-out 0.8s both; }
+.subtitle-fade-2 { animation: subtitleFade 0.7s ease-out 1.4s both; }
+.subtitle-fade-3 { animation: subtitleFade 0.7s ease-out 2.0s both; }
+.subtitle-fade-4 { animation: subtitleFade 0.7s ease-out 2.6s both; }
