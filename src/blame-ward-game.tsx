@@ -9,6 +9,8 @@ import CharacterStage from './game/CharacterStage';
 import Atmosphere from './game/Atmosphere';
 import ImpactLayer, { type FloatScore } from './game/ImpactLayer';
 import GameMenu, { type BacklogEntry } from './game/GameMenu';
+import IntroWalkScene from './game/IntroWalkScene';
+import { resolveBackground } from './game/backgrounds';
 import { useGameSettings } from './game/settings';
 import { sfx } from './game/sound';
 
@@ -24,6 +26,7 @@ export default function BlameWardGame() {
   const [choiceResult, setChoiceResult] = useState<Choice | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
+  const [showIntroWalk, setShowIntroWalk] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [warningText, setWarningText] = useState('');
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
@@ -72,6 +75,9 @@ export default function BlameWardGame() {
 
   // ───────────────────────── typewriter ─────────────────────────
   useEffect(() => {
+    // 시작 화면이나 인트로 컷씬 중에는 typewriter 를 돌리지 않는다.
+    // 그러지 않으면 25ms 마다 부모 re-render 가 일어나 인트로의 CSS transition 이 깨진다.
+    if (!gameStarted || showIntroWalk) return;
     if (!currentDialogue || showChoice || showFeedback) return;
     setIsTyping(true);
     setDisplayedText('');
@@ -90,7 +96,7 @@ export default function BlameWardGame() {
       }
     }, speedMs);
     return () => clearInterval(interval);
-  }, [sceneIdx, dialogueIdx, showChoice, showFeedback, settings.textSpeedMs, settings.skip]);
+  }, [gameStarted, showIntroWalk, sceneIdx, dialogueIdx, showChoice, showFeedback, settings.textSpeedMs, settings.skip]);
 
   // ───────────────────────── 백로그 누적 ─────────────────────────
   useEffect(() => {
@@ -296,7 +302,7 @@ export default function BlameWardGame() {
           </div>
 
           <button
-            onClick={() => { sfx.play('choice-select'); setGameStarted(true); }}
+            onClick={() => { sfx.play('choice-select'); setShowIntroWalk(true); }}
             className="subtitle-fade-4 px-8 py-3 bg-gradient-to-r from-red-700 to-red-900 hover:from-red-600 hover:to-red-800 text-white rounded-lg shadow-lg shadow-red-900/50 transition-all hover:scale-105 font-semibold tracking-wide"
           >
             병동에 입장하기 →
@@ -304,6 +310,16 @@ export default function BlameWardGame() {
 
           <p className="subtitle-fade-4 text-stone-500 text-xs">※ 본 프로그램은 환자안전문화 교육 연구 목적의 시뮬레이션입니다.</p>
         </div>
+
+        {/* 인트로 워킹 컷씬 */}
+        {showIntroWalk && (
+          <IntroWalkScene
+            onFinish={() => {
+              setShowIntroWalk(false);
+              setGameStarted(true);
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -343,11 +359,19 @@ export default function BlameWardGame() {
         if (!showChoice && !showFeedback) handleNext();
       }}
     >
-      {/* 배경 그라데이션 분위기 (기존 이모지 백그라운드는 매우 옅게) */}
-      <div className="absolute inset-0 opacity-[0.025] flex items-center justify-center pointer-events-none">
-        <div className="text-[20rem]">{currentScene.bgImage}</div>
-      </div>
-      <div className="absolute inset-0 bg-black/45 pointer-events-none"></div>
+      {/* 시나리오 배경 일러스트 */}
+      {(() => {
+        const bgUrl = resolveBackground(currentScene.bgImage);
+        return bgUrl ? (
+          <div
+            key={`bg-${currentScene.id}`}
+            className="absolute inset-0 pointer-events-none bg-cover bg-center transition-opacity duration-700 emotion-fade-in"
+            style={{ backgroundImage: `url(${bgUrl})` }}
+          />
+        ) : null;
+      })()}
+      {/* 어둡게 깔리는 분위기 오버레이 (캐릭터 가시성 확보) */}
+      <div className="absolute inset-0 bg-black/40 pointer-events-none"></div>
 
       {/* 시네마틱 배경 레이어 */}
       <Atmosphere safetyScore={safetyScore} />
