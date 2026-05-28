@@ -19,6 +19,13 @@ body {
   filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.5));
 }
 
+/* 인트로 워킹 컨테이너 — left 속성을 6.2초 linear 보간 (CSS 클래스로 두어 React 가
+   매 render 마다 transition 을 reset 하지 않도록) */
+.walker-transition {
+  transition: left 6.2s linear;
+  will-change: left;
+}
+
 /* idle 상태 캐릭터 — 매우 느린 호흡 */
 @keyframes idleBreathe {
   0%, 100% { transform: translateY(0) scale(1); }
