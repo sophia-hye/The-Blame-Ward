@@ -5,7 +5,7 @@ export const scenes: Scene[] = [
     id: 'scene1',
     title: '장면 1. 겉으로만 평온한 병동 안내',
     bg: 'from-slate-900 via-slate-800 to-red-950/30',
-    bgImage: '🏥',
+    bgImage: 'nicu_entrance',
     dialogues: [
       { speaker: '나레이션', text: '중환자실 입구. 신생아 및 소아 중환자실(NICU/PICU). 첫 출근날, 차가운 형광등 불빛 아래 독고영 수간호사가 루리를 맞이한다.' },
       { speaker: '독고영', text: '안녕하세요. 저희는 신생아 및 소아 중환자실입니다. 저는 수간호사 독고영입니다. 반갑습니다, 이루리 선생.', emotion: 'happy' },
@@ -18,7 +18,7 @@ export const scenes: Scene[] = [
     id: 'scene2',
     title: '장면 2. "조용히 넘어가자" - 은폐의 유혹',
     bg: 'from-slate-900 via-gray-900 to-red-950/40',
-    bgImage: '💧',
+    bgImage: 'nicu_opened',
     dialogues: [
       { speaker: '나레이션', text: '개방 병상 구석. 2년차 노심초 간호사가 사색이 되어 있다. 루리는 독고영 옆에서 이 광경을 목격한다.' },
       { speaker: '노심초', text: '(수액 라인을 조절하며 벌벌 떤다) 어떡해... 속도가 너무 빨랐어. 아기 발등이 부었잖아... 아무도 못 봤겠지?', emotion: 'afraid' },
@@ -42,7 +42,7 @@ export const scenes: Scene[] = [
     id: 'scene3',
     title: '장면 3. "바빠 죽겠는데 무슨..." - 효율이라는 이름의 도박',
     bg: 'from-slate-900 via-orange-950/30 to-red-950/40',
-    bgImage: '💊',
+    bgImage: 'nice_closed',
     dialogues: [
       { speaker: '나레이션', text: '격리 병상 쪽으로 이동 중 응급 알람이 울린다. 5년차 유연해 간호사가 약을 준비 중이다.' },
       { speaker: '독고영', text: '응급 상황이군! 유연해 선생, 빨리 고위험 약물 준비해!', emotion: 'angry' },
@@ -58,7 +58,7 @@ export const scenes: Scene[] = [
     id: 'scene3_5',
     title: '장면 3.5. SNS 속의 비인간성',
     bg: 'from-slate-900 via-purple-950/30 to-red-950/40',
-    bgImage: '📱',
+    bgImage: 'nicu_station1',
     dialogues: [
       { speaker: '나레이션', text: '스테이션 한구석. 8년차 안성공 간호사가 스마트폰을 만지며 낄낄거리고 있다. 독고영 수간호사가 잠시 전화를 받으러 간 사이, 루리는 그 옆에서 우연히 안성공의 화면을 보게 된다.' },
       { speaker: '나레이션', text: '(효과음: 저 멀리 격리실에서 자지러지게 우는 아기의 날카로운 울음소리)' },
@@ -77,7 +77,7 @@ export const scenes: Scene[] = [
     id: 'scene4',
     title: '장면 4. 도입부의 마무리',
     bg: 'from-slate-950 via-black to-red-950/60',
-    bgImage: '⚠️',
+    bgImage: 'nicu_station2',
     dialogues: [
       { speaker: '나레이션', text: '독고영이 루리를 차갑게 응시한다.' },
       { speaker: '독고영', text: '보시다시피 우리 병동은 매우 바쁘고 엄격합니다. 개인의 실수는 곧 병동의 위기죠. 자, 이제 남은 구역 안내를 마저 하겠습니다. 따라오세요.', emotion: 'cold' },
