@@ -17,3 +17,8 @@ docs/.pdca-*.json
 
 # Claude Code local-only settings
 .claude/settings.local.json
+
+# spritesheet 원본 (리사이즈된 walking_sideview.png/.json 만 커밋)
+assets/img/*/spritesheet_normal_sideview/
+assets/img/*/spritesheet-*/
+assets/img/*/spritesheet*.zip
